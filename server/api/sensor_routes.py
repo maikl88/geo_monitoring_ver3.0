@@ -1,11 +1,12 @@
 # server/api/sensor_routes.py
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from server.services.data_service import DataService
 from server.services.prediction_service import PredictionService
 from server.database.db import db
 from server.models.sensor_data import Sensor, Building, SensorReading, AlertConfig
 from datetime import datetime, timedelta
+
 
 # Создаем Blueprint для маршрутов, связанных с датчиками
 sensor_api = Blueprint('sensor_api', __name__)
@@ -133,19 +134,57 @@ def get_sensor_readings(sensor_id):
     hours = request.args.get('hours', 24, type=int)
     start_time = datetime.utcnow() - timedelta(hours=hours)
     
-    readings = DataService.get_readings_for_period(sensor_id, start_time)
-    result = []
+    print(f"Запрос показаний датчика {sensor_id} за последние {hours} часов (с {start_time})")
     
-    for reading in readings:
-        result.append({
-            'id': reading.id,
-            'value': reading.value,
-            'unit': reading.unit,
-            'timestamp': reading.timestamp.isoformat(),
-            'is_alert': reading.is_alert
-        })
+    try:
+        # Получаем ВСЕ показания для данного датчика из БД напрямую через SQLite
+        import sqlite3
+        import os
+        from server.config import SQLITE_DB_PATH
+        
+        print(f"Используем прямой доступ к БД: {SQLITE_DB_PATH}")
+        
+        # Подключаемся к БД
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        conn.row_factory = sqlite3.Row  # Чтобы получить доступ к колонкам по имени
+        cursor = conn.cursor()
+        
+        # Общее количество показаний
+        cursor.execute("SELECT COUNT(*) FROM sensor_reading WHERE sensor_id = ?", (sensor_id,))
+        total_count = cursor.fetchone()[0]
+        print(f"Всего найдено {total_count} показаний для датчика {sensor_id}")
+        
+        # Запрашиваем все показания для датчика
+        cursor.execute("""
+            SELECT id, sensor_id, timestamp, value, unit, is_alert
+            FROM sensor_reading 
+            WHERE sensor_id = ? 
+            ORDER BY timestamp DESC
+        """, (sensor_id,))
+        
+        readings = cursor.fetchall()
+        print(f"Получено {len(readings)} показаний")
+        
+        # Формируем ответ
+        result = []
+        for row in readings:
+            result.append({
+                'id': row['id'],
+                'value': row['value'],
+                'unit': row['unit'],
+                'timestamp': row['timestamp'],
+                'is_alert': bool(row['is_alert'])
+            })
+        
+        conn.close()
+        
+        return jsonify(result), 200
     
-    return jsonify(result), 200
+    except Exception as e:
+        print(f"Ошибка при получении показаний: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
 # Получение предсказаний для датчика
 @sensor_api.route('/sensors/<int:sensor_id>/predictions', methods=['GET'])

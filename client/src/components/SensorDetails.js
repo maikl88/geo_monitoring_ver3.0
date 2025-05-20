@@ -15,9 +15,33 @@ const SensorDetails = () => {
   const [error, setError] = useState(null);
   const [timeRange, setTimeRange] = useState(24); // По умолчанию 24 часа
 
+   // Добавьте эти состояния для автообновления
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(5); // 5 секунд по умолчанию
+
+  // Модифицированный useEffect, чтобы добавить автообновление
   useEffect(() => {
+    // Загружаем данные при первой загрузке
     fetchSensorData();
-  }, [sensorId, timeRange]);
+    
+    // Настраиваем интервал автообновления
+    let intervalId = null;
+    if (autoRefresh) {
+      console.log(`Установка автообновления с интервалом ${refreshInterval} секунд`);
+      intervalId = setInterval(() => {
+        console.log("Автоматическое обновление данных...");
+        fetchSensorData();
+      }, refreshInterval * 1000);
+    }
+    
+    // Очищаем интервал при размонтировании компонента или при изменении зависимостей
+    return () => {
+      if (intervalId) {
+        console.log("Очистка интервала автообновления");
+        clearInterval(intervalId);
+      }
+    };
+  }, [sensorId, timeRange, autoRefresh, refreshInterval]); // Добавить autoRefresh и refreshInterval в зависимости
 
   const fetchSensorData = async () => {
     try {
@@ -103,87 +127,57 @@ const SensorDetails = () => {
       </div>
 
       <Row className="mb-4">
-        <Col lg={6}>
-          <Card className="sensor-details-card">
-            <Card.Header as="h5">Информация о датчике</Card.Header>
-            <Card.Body>
-              <Row>
-                <Col sm={4} className="fw-bold">Тип датчика:</Col>
-                <Col sm={8}>{sensor.type}</Col>
-              </Row>
-              <Row className="mt-2">
-                <Col sm={4} className="fw-bold">Расположение:</Col>
-                <Col sm={8}>{sensor.location}</Col>
-              </Row>
-              {sensor.floor && (
-                <Row className="mt-2">
-                  <Col sm={4} className="fw-bold">Этаж:</Col>
-                  <Col sm={8}>{sensor.floor}</Col>
-                </Row>
-              )}
-              <Row className="mt-2">
-                <Col sm={4} className="fw-bold">Статус:</Col>
-                <Col sm={8}>
-                  <Badge bg={sensor.status === 'active' ? 'success' : 'warning'}>
-                    {sensor.status === 'active' ? 'Активен' : 'Обслуживание'}
-                  </Badge>
-                </Col>
-              </Row>
-              {sensor.last_reading && (
-                <>
-                  <Row className="mt-2">
-                    <Col sm={4} className="fw-bold">Последнее показание:</Col>
-                    <Col sm={8} className={sensor.last_reading.is_alert ? 'text-danger fw-bold' : ''}>
-                      {sensor.last_reading.value} {sensor.last_reading.unit}
-                    </Col>
-                  </Row>
-                  <Row className="mt-2">
-                    <Col sm={4} className="fw-bold">Время измерения:</Col>
-                    <Col sm={8}>{new Date(sensor.last_reading.timestamp).toLocaleString()}</Col>
-                  </Row>
-                  <Row className="mt-2">
-                    <Col sm={4} className="fw-bold">Статус измерения:</Col>
-                    <Col sm={8}>
-                      {sensor.last_reading.is_alert ? (
-                        <Alert variant="danger" className="py-1 px-2 mb-0 d-inline-block">
-                          Тревога
-                        </Alert>
-                      ) : (
-                        <Alert variant="success" className="py-1 px-2 mb-0 d-inline-block">
-                          В норме
-                        </Alert>
-                      )}
-                    </Col>
-                  </Row>
-                </>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-        
-        <Col lg={6}>
-          <Card className="sensor-details-card">
-            <Card.Header as="h5">Настройки графика</Card.Header>
-            <Card.Body>
-              <Form>
+              <Col lg={6}>
+        <Card className="sensor-details-card">
+          <Card.Header as="h5">Настройки графика</Card.Header>
+          <Card.Body>
+            <Form>
+              <Form.Group className="mb-3">
+                <Form.Label>Период отображения данных</Form.Label>
+                <Form.Select value={timeRange} onChange={handleTimeRangeChange}>
+                  <option value="6">Последние 6 часов</option>
+                  <option value="12">Последние 12 часов</option>
+                  <option value="24">Последние 24 часа</option>
+                  <option value="48">Последние 2 дня</option>
+                  <option value="72">Последние 3 дня</option>
+                  <option value="168">Последняя неделя</option>
+                  <option value="720">Последний месяц</option>
+                </Form.Select>
+              </Form.Group>
+              
+              {/* Добавьте переключатель автообновления */}
+              <Form.Group className="mb-3">
+                <Form.Check 
+                  type="switch"
+                  id="auto-refresh-switch"
+                  label="Автоматическое обновление"
+                  checked={autoRefresh}
+                  onChange={() => setAutoRefresh(!autoRefresh)}
+                />
+              </Form.Group>
+              
+              {/* Отображаем выбор интервала только если автообновление включено */}
+              {autoRefresh && (
                 <Form.Group className="mb-3">
-                  <Form.Label>Период отображения данных</Form.Label>
-                  <Form.Select value={timeRange} onChange={handleTimeRangeChange}>
-                    <option value="6">Последние 6 часов</option>
-                    <option value="12">Последние 12 часов</option>
-                    <option value="24">Последние 24 часа</option>
-                    <option value="48">Последние 2 дня</option>
-                    <option value="72">Последние 3 дня</option>
-                    <option value="168">Последняя неделя</option>
-                    <option value="720">Последний месяц</option>
+                  <Form.Label>Интервал обновления (секунды)</Form.Label>
+                  <Form.Select 
+                    value={refreshInterval}
+                    onChange={(e) => setRefreshInterval(Number(e.target.value))}
+                  >
+                    <option value="5">5 секунд</option>
+                    <option value="10">10 секунд</option>
+                    <option value="30">30 секунд</option>
+                    <option value="60">1 минута</option>
                   </Form.Select>
                 </Form.Group>
-                <Button variant="primary" onClick={fetchSensorData}>
-                  Обновить данные
-                </Button>
-              </Form>
-            </Card.Body>
-          </Card>
+              )}
+              
+              <Button variant="primary" onClick={fetchSensorData}>
+                Обновить данные сейчас
+              </Button>
+            </Form>
+          </Card.Body>
+        </Card>
           
           {/* Блок предсказания */}
           <PredictionView 

@@ -5,10 +5,11 @@ from flask_cors import CORS
 from server.database.db import init_db
 from server.api.routes import api
 from server.api.sensor_routes import sensor_api
-from server.config import SQLALCHEMY_DATABASE_URI, SECRET_KEY, API_PREFIX
+from server.config import SQLALCHEMY_DATABASE_URI, SECRET_KEY, API_PREFIX, MQTT_BROKER_HOST, MQTT_BROKER_PORT
 from server.utils.data_generator import DataGenerator
 from server.database.db import db
 from server.models.sensor_data import Building, Sensor
+from server.mqtt import init_mqtt  # Импортируем функцию инициализации MQTT
 
 def create_app():
     app = Flask(__name__)
@@ -24,6 +25,11 @@ def create_app():
     # Инициализация базы данных
     init_db(app)
     
+    # Инициализация MQTT-клиента
+    mqtt_success = init_mqtt(app)
+    if not mqtt_success:
+        app.logger.warning("Не удалось инициализировать MQTT-клиент. Данные с датчиков будут недоступны.")
+    
     # Регистрация Blueprint'ов
     app.register_blueprint(api, url_prefix=API_PREFIX)
     app.register_blueprint(sensor_api, url_prefix=f"{API_PREFIX}/geo")
@@ -37,8 +43,7 @@ def create_app():
     def server_error(error):
         return jsonify({'error': 'Внутренняя ошибка сервера'}), 500
     
-    # Маршрут для заполнения тестовыми данными - ПЕРЕНОСИМ его НЕ в Blueprint,
-    # а прямо в основной app, чтобы он был доступен без префикса API
+    # Маршрут для заполнения тестовыми данными
     @app.route('/init-sample-data')
     def init_sample_data():
         try:
@@ -61,19 +66,20 @@ def create_app():
             db.session.add_all(sensors)
             db.session.commit()
             
-            # Генерируем показания для каждого датчика
+            # Генерация ИСТОРИЧЕСКИХ показаний для каждого датчика
             for sensor in Sensor.query.all():
-                DataGenerator.generate_readings_for_sensor(sensor, days_back=30, readings_per_day=24)
+                DataGenerator.generate_readings_for_sensor(sensor, days_back=7, readings_per_day=24)
             
+            # Показания датчиков теперь будут приходить через MQTT
             return jsonify({
-                'message': 'Тестовые данные успешно созданы',
+                'message': 'Тестовые данные созданы. Здания и датчики инициализированы.',
+                'info': 'Для получения показаний запустите скрипт sensors_simulator.py',
                 'buildings': len(buildings),
-                'sensors': len(sensors),
-                'readings': 'сгенерированы за 30 дней'
+                'sensors': len(sensors)
             }), 200
         except Exception as e:
             return jsonify({'error': str(e)}), 500
-    
+        
     return app
 
 if __name__ == "__main__":
