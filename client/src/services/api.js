@@ -1,9 +1,8 @@
-// client/src/services/api.js
+// client/src/services/api.js (обновленная версия)
 import axios from 'axios';
 
-// Базовый URL для API - УДАЛЯЕМ ПРЕФИКС отсюда, так как он будет добавлен прокси
+// Базовый URL для API
 const API_BASE_URL = '';
-const GEO_API_URL = `${API_BASE_URL}/geo`;
 
 // Создаем экземпляр axios с базовым URL
 const api = axios.create({
@@ -13,54 +12,61 @@ const api = axios.create({
   },
 });
 
-// API для работы с зданиями
+// API для работы с зданиями (без изменений)
 export const buildingsApi = {
-  // Получить все здания
   getAll: () => api.get(`/api/v1/geo/buildings`),
-  
-  // Получить информацию о конкретном здании
   getById: (buildingId) => api.get(`/api/v1/geo/buildings/${buildingId}`),
 };
 
-// API для работы с датчиками
+// API для работы с датчиками (обновленный)
 export const sensorsApi = {
-  // Получить все датчики
+  // Существующие методы
   getAll: (buildingId = null) => {
     const params = buildingId ? { building_id: buildingId } : {};
     return api.get(`/api/v1/geo/sensors`, { params });
   },
   
-  // Получить информацию о конкретном датчике
   getById: (sensorId) => api.get(`/api/v1/geo/sensors/${sensorId}`),
   
-  // Получить показания датчика
   getReadings: (sensorId, hours = 24) => 
     api.get(`/api/v1/geo/sensors/${sensorId}/readings`, { 
       params: { hours } 
     }),
   
-  // Получить предсказания для датчика
-  getPredictions: (sensorId, hours = 24) => 
-    api.get(`/api/v1/geo/sensors/${sensorId}/predictions`, { 
-      params: { hours } 
-    }),
-  
-  // Добавить новое показание датчика (для тестирования)
   addReading: (sensorId, value, unit) => 
     api.post(`/api/v1/geo/sensors/${sensorId}/readings`, { 
       value, unit 
     }),
+
+  // НОВЫЕ методы для аппроксимации (заменяют getPredictions)
+  getApproximation: (sensorId, hours = 24, degree = null, points = 100) => {
+    const params = { hours, points };
+    if (degree !== null) {
+      params.degree = degree;
+    }
+    return api.get(`/api/v1/geo/sensors/${sensorId}/approximation`, { params });
+  },
+
+  getTrend: (sensorId, hours = 24, degree = null) => {
+    const params = { hours };
+    if (degree !== null) {
+      params.degree = degree;
+    }
+    return api.get(`/api/v1/geo/sensors/${sensorId}/trend`, { params });
+  },
+
+  // УДАЛЯЕМ старый метод getPredictions
+  // getPredictions: (sensorId, hours = 24) => ...
 };
 
-// API для работы с тревогами
+// API для работы с тревогами (без изменений)
 export const alertsApi = {
-  // Получить все тревоги
   getAll: (hours = 24) => api.get(`/api/v1/geo/alerts`, { 
     params: { hours } 
   }),
 };
 
-// API для инициализации тестовых данных
+// API для инициализации тестовых данных (без изменений)
 export const utilsApi = {
   initSampleData: () => api.get('/init-sample-data'),
 };

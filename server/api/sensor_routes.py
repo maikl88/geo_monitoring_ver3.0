@@ -1,8 +1,8 @@
-# server/api/sensor_routes.py
+# server/api/sensor_routes.py (ПОЛНАЯ ЗАМЕНА)
 
 from flask import Blueprint, jsonify, request, current_app
 from server.services.data_service import DataService
-from server.services.prediction_service import PredictionService
+from server.services.approximation_service import ApproximationService  # НОВЫЙ ИМПОРТ
 from server.database.db import db
 from server.models.sensor_data import Sensor, Building, SensorReading, AlertConfig
 from datetime import datetime, timedelta
@@ -154,16 +154,16 @@ def get_sensor_readings(sensor_id):
         total_count = cursor.fetchone()[0]
         print(f"Всего найдено {total_count} показаний для датчика {sensor_id}")
         
-        # Запрашиваем все показания для датчика
+        # Запрашиваем показания за нужный период
         cursor.execute("""
             SELECT id, sensor_id, timestamp, value, unit, is_alert
             FROM sensor_reading 
-            WHERE sensor_id = ? 
+            WHERE sensor_id = ? AND timestamp >= ?
             ORDER BY timestamp DESC
-        """, (sensor_id,))
+        """, (sensor_id, start_time.isoformat()))
         
         readings = cursor.fetchall()
-        print(f"Получено {len(readings)} показаний")
+        print(f"Получено {len(readings)} показаний за период")
         
         # Формируем ответ
         result = []
@@ -186,38 +186,123 @@ def get_sensor_readings(sensor_id):
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
-# Получение предсказаний для датчика
-@sensor_api.route('/sensors/<int:sensor_id>/predictions', methods=['GET'])
-def get_sensor_predictions(sensor_id):
+# НОВЫЙ МАРШРУТ: Получение полиномиальной аппроксимации для датчика
+@sensor_api.route('/sensors/<int:sensor_id>/approximation', methods=['GET'])
+def get_sensor_approximation(sensor_id):
+    """Получение полиномиальной аппроксимации для датчика"""
     sensor = DataService.get_sensor(sensor_id)
     
     if not sensor:
         return jsonify({'error': 'Датчик не найден'}), 404
     
-    # Получаем параметры прогнозирования
-    hours_ahead = request.args.get('hours', 24, type=int)
+    # Получаем параметры из query
+    hours_back = request.args.get('hours', 24, type=int)
+    degree = request.args.get('degree', type=int)
+    num_points = request.args.get('points', 100, type=int)
     
-    # Получаем предсказания
-    predictions = PredictionService.predict_next_hours(sensor_id, hours_ahead)
+    # Ограничиваем параметры разумными пределами
+    hours_back = max(1, min(hours_back, 168 * 4))  # От 1 часа до 4 недель
+    num_points = max(10, min(num_points, 500))     # От 10 до 500 точек
     
-    result = []
-    for time, value in predictions:
-        result.append({
-            'timestamp': time.isoformat(),
-            'value': value
-        })
+    print(f"Запрос аппроксимации: sensor_id={sensor_id}, hours_back={hours_back}, degree={degree}")
     
-    # Проверяем, будет ли тревога в ближайшее время
-    will_alert, alert_time = PredictionService.predict_alert_in_future(sensor_id, hours_ahead)
+    # Если степень не указана, определяем оптимальную
+    if degree is None:
+        try:
+            degree = ApproximationService.get_optimal_degree(sensor_id, hours_back)
+        except Exception as e:
+            print(f"Ошибка определения оптимальной степени: {e}")
+            degree = 3  # По умолчанию
+    
+    # Ограничиваем степень разумными пределами
+    degree = max(2, min(degree, 5))
+    
+    try:
+        # Получаем аппроксимацию
+        approximation_data = ApproximationService.get_polynomial_approximation(
+            sensor_id, hours_back, degree, num_points
+        )
+        
+        # Получаем анализ тренда только если аппроксимация успешна
+        trend_analysis = None
+        if not approximation_data['error']:
+            try:
+                trend_analysis = ApproximationService.get_trend_analysis(sensor_id, hours_back, degree)
+            except Exception as e:
+                print(f"Ошибка анализа тренда: {e}")
+                trend_analysis = {
+                    'trend': 'unknown',
+                    'description': 'Ошибка анализа тренда',
+                    'trend_strength': 0
+                }
+        else:
+            trend_analysis = {
+                'trend': 'unknown',
+                'description': 'Недостаточно данных для анализа тренда',
+                'trend_strength': 0
+            }
+        
+        return jsonify({
+            'sensor_id': sensor_id,
+            'approximation_data': approximation_data,
+            'trend_analysis': trend_analysis,
+            'parameters': {
+                'hours_back': hours_back,
+                'degree': degree,
+                'num_points': num_points
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Общая ошибка аппроксимации: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        return jsonify({
+            'sensor_id': sensor_id,
+            'approximation_data': {
+                'original_data': [],
+                'approximation': [],
+                'error': f'Ошибка сервера: {str(e)}'
+            },
+            'trend_analysis': {
+                'trend': 'error',
+                'description': f'Ошибка анализа: {str(e)}',
+                'trend_strength': 0
+            },
+            'parameters': {
+                'hours_back': hours_back,
+                'degree': degree,
+                'num_points': num_points
+            }
+        }), 200  # Возвращаем 200, но с ошибкой в данных
+
+# НОВЫЙ МАРШРУТ: Получение анализа тренда для датчика
+@sensor_api.route('/sensors/<int:sensor_id>/trend', methods=['GET'])
+def get_sensor_trend(sensor_id):
+    """Получение анализа тренда для датчика"""
+    sensor = DataService.get_sensor(sensor_id)
+    
+    if not sensor:
+        return jsonify({'error': 'Датчик не найден'}), 404
+    
+    hours_back = request.args.get('hours', 24, type=int)
+    degree = request.args.get('degree', type=int)
+    
+    if degree is None:
+        degree = ApproximationService.get_optimal_degree(sensor_id, hours_back)
+    
+    trend_analysis = ApproximationService.get_trend_analysis(sensor_id, hours_back, degree)
     
     return jsonify({
         'sensor_id': sensor_id,
-        'predictions': result,
-        'alert_prediction': {
-            'will_alert': will_alert,
-            'alert_time': alert_time.isoformat() if alert_time else None
-        }
+        'trend_analysis': trend_analysis
     }), 200
+
+# УДАЛЯЕМ СТАРЫЙ МАРШРУТ predictions (если он есть)
+# @sensor_api.route('/sensors/<int:sensor_id>/predictions', methods=['GET'])
+# def get_sensor_predictions(sensor_id):
+#     ...
 
 # Получение тревог системы
 @sensor_api.route('/alerts', methods=['GET'])

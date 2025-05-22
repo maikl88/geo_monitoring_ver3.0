@@ -1,4 +1,4 @@
-# server/utils/data_generator.py
+# server/utils/data_generator.py (исправленная версия)
 
 import random
 from datetime import datetime, timedelta
@@ -10,7 +10,7 @@ class DataGenerator:
     """Генератор синтетических данных для тестирования"""
     
     @staticmethod
-    def generate_sample_buildings(count=2):
+    def generate_sample_buildings(count=10):
         """Создает тестовые здания"""
         buildings = []
         building_types = ['Жилое', 'Офисное', 'Промышленное']
@@ -65,11 +65,23 @@ class DataGenerator:
         return configs
     
     @staticmethod
-    def generate_readings_for_sensor(sensor, days_back=30, readings_per_day=24):
-        """Генерирует исторические показания для датчика"""
+    def generate_readings_for_sensor(sensor, days_back=7, readings_per_day=24):
+        """
+        Генерирует исторические показания для датчика БЕЗ ВРЕМЕННОГО РАЗРЫВА
+        
+        ВАЖНО: Генерирует данные вплоть до ТЕКУЩЕГО момента, 
+        чтобы не было разрыва с данными от симулятора
+        """
         readings = []
+        
+        # КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: конечное время = СЕЙЧАС
         end_time = datetime.utcnow()
+        
+        # Начальное время = days_back дней назад
         start_time = end_time - timedelta(days=days_back)
+        
+        print(f"Генерация показаний для датчика {sensor.id} ({sensor.name})")
+        print(f"Период: {start_time} → {end_time}")
         
         # Определяем базовое значение и единицу измерения в зависимости от типа датчика
         base_value = 0
@@ -92,13 +104,15 @@ class DataGenerator:
             unit = '°C'
         
         # Генерируем значения с некоторым трендом и случайными колебаниями
-        time_interval = (end_time - start_time) / (days_back * readings_per_day)
+        total_readings = days_back * readings_per_day
+        time_interval = (end_time - start_time) / total_readings
         
-        for i in range(days_back * readings_per_day):
+        for i in range(total_readings):
+            # ВАЖНО: timestamp идет до самого конца (до текущего времени)
             timestamp = start_time + time_interval * i
             
             # Добавляем тренд (медленное изменение со временем)
-            trend_factor = i / (days_back * readings_per_day)
+            trend_factor = i / total_readings
             trend = 0
             
             if sensor.sensor_type == 'инклинометр':
@@ -130,9 +144,78 @@ class DataGenerator:
             value = base_value + trend + periodic + (noise * noise_factor)
             
             # Создаем показание
-            DataService.add_sensor_reading(
-                sensor_id=sensor.id,
-                value=value,
-                unit=unit,
-                timestamp=timestamp
-            )
+            try:
+                DataService.add_sensor_reading(
+                    sensor_id=sensor.id,
+                    value=value,
+                    unit=unit,
+                    timestamp=timestamp
+                )
+            except Exception as e:
+                print(f"Ошибка добавления показания: {e}")
+                continue
+                
+        print(f"Сгенерировано {total_readings} показаний для датчика {sensor.id}")
+    
+    @staticmethod
+    def cleanup_old_readings(sensor_id, keep_days=30):
+        """
+        Удаляет старые показания, оставляя только последние keep_days дней
+        Полезно для очистки БД от накопившихся данных
+        """
+        from server.database.db import db
+        from server.models.sensor_data import SensorReading
+        
+        cutoff_time = datetime.utcnow() - timedelta(days=keep_days)
+        
+        old_readings = SensorReading.query.filter(
+            SensorReading.sensor_id == sensor_id,
+            SensorReading.timestamp < cutoff_time
+        ).all()
+        
+        count = len(old_readings)
+        if count > 0:
+            for reading in old_readings:
+                db.session.delete(reading)
+            
+            db.session.commit()
+            print(f"Удалено {count} старых показаний для датчика {sensor_id}")
+        
+        return count
+    
+    @staticmethod
+    def regenerate_recent_data(sensor_id, hours_back=24):
+        """
+        Пересоздает данные за последние несколько часов
+        Полезно для заполнения пробелов в данных
+        """
+        from server.database.db import db
+        from server.models.sensor_data import SensorReading
+        
+        sensor = DataService.get_sensor(sensor_id)
+        if not sensor:
+            print(f"Датчик {sensor_id} не найден")
+            return
+        
+        # Удаляем существующие данные за период
+        start_time = datetime.utcnow() - timedelta(hours=hours_back)
+        recent_readings = SensorReading.query.filter(
+            SensorReading.sensor_id == sensor_id,
+            SensorReading.timestamp >= start_time
+        ).all()
+        
+        for reading in recent_readings:
+            db.session.delete(reading)
+        
+        db.session.commit()
+        print(f"Удалены показания за последние {hours_back} часов для датчика {sensor_id}")
+        
+        # Генерируем новые данные
+        days_fraction = hours_back / 24
+        DataGenerator.generate_readings_for_sensor(
+            sensor, 
+            days_back=days_fraction, 
+            readings_per_day=24
+        )
+        
+        print(f"Сгенерированы новые показания за последние {hours_back} часов")

@@ -1,4 +1,4 @@
-// client/src/components/SensorChart.js
+// client/src/components/SensorChart.js (обновленная версия)
 import React from 'react';
 import { Card } from 'react-bootstrap';
 import { Line } from 'react-chartjs-2';
@@ -28,8 +28,8 @@ ChartJS.register(
   TimeScale
 );
 
-const SensorChart = ({ readings, predictions, sensorType, unit }) => {
-  // Подготавливаем данные для графика
+const SensorChart = ({ readings, approximationData, sensorType, unit }) => {
+  // Подготавливаем исходные данные для графика
   const formatReadingsData = () => {
     if (!readings || readings.length === 0) {
       return [];
@@ -41,15 +41,15 @@ const SensorChart = ({ readings, predictions, sensorType, unit }) => {
     }));
   };
 
-  // Подготавливаем данные предсказаний
-  const formatPredictionsData = () => {
-    if (!predictions || predictions.length === 0) {
+  // Подготавливаем данные аппроксимации
+  const formatApproximationData = () => {
+    if (!approximationData || !approximationData.approximation || approximationData.approximation.length === 0) {
       return [];
     }
 
-    return predictions.map(prediction => ({
-      x: new Date(prediction.timestamp),
-      y: prediction.value
+    return approximationData.approximation.map(point => ({
+      x: new Date(point.timestamp),
+      y: point.value
     }));
   };
 
@@ -57,6 +57,10 @@ const SensorChart = ({ readings, predictions, sensorType, unit }) => {
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false,
+    },
     scales: {
       x: {
         type: 'time',
@@ -90,7 +94,7 @@ const SensorChart = ({ readings, predictions, sensorType, unit }) => {
       },
       title: {
         display: true,
-        text: `Показания ${sensorType || 'датчика'}`
+        text: `Показания ${sensorType || 'датчика'} с полиномиальной аппроксимацией`
       },
       tooltip: {
         callbacks: {
@@ -100,7 +104,7 @@ const SensorChart = ({ readings, predictions, sensorType, unit }) => {
               label += ': ';
             }
             if (context.parsed.y !== null) {
-              label += `${context.parsed.y} ${unit || ''}`;
+              label += `${context.parsed.y.toFixed(2)} ${unit || ''}`;
             }
             return label;
           }
@@ -110,26 +114,55 @@ const SensorChart = ({ readings, predictions, sensorType, unit }) => {
   };
 
   // Данные для графика
+  const datasets = [];
+
+  // Добавляем исходные данные (точки датчика)
+  const readingsData = formatReadingsData();
+  if (readingsData.length > 0) {
+    datasets.push({
+      label: 'Данные датчика',
+      data: readingsData,
+      borderColor: 'rgba(75, 192, 192, 0.6)',
+      backgroundColor: 'rgba(75, 192, 192, 0.8)',
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      borderWidth: 1,
+      tension: 0, // Прямые линии между точками
+      showLine: true
+    });
+  }
+
+  // Добавляем аппроксимацию (гладкая кривая)
+  const approximationPoints = formatApproximationData();
+  if (approximationPoints.length > 0) {
+    datasets.push({
+      label: `Аппроксимация (степень ${approximationData?.quality_metrics?.degree || 'авто'})`,
+      data: approximationPoints,
+      borderColor: 'rgba(255, 99, 132, 0.8)',
+      backgroundColor: 'rgba(255, 99, 132, 0.1)',
+      pointRadius: 0, // Убираем точки для гладкой кривой
+      pointHoverRadius: 3,
+      borderWidth: 3,
+      tension: 0.1, // Небольшая сглаженность
+      fill: false
+    });
+  }
+
   const data = {
-    datasets: [
-      {
-        label: 'Исторические данные',
-        data: formatReadingsData(),
-        borderColor: 'rgb(53, 162, 235)',
-        backgroundColor: 'rgba(53, 162, 235, 0.5)',
-      }
-    ]
+    datasets: datasets
   };
 
-  // Добавляем предсказания, если они есть
-  if (predictions && predictions.length > 0) {
-    data.datasets.push({
-      label: 'Предсказания',
-      data: formatPredictionsData(),
-      borderColor: 'rgb(255, 99, 132)',
-      backgroundColor: 'rgba(255, 99, 132, 0.5)',
-      borderDash: [5, 5] // Пунктирная линия для предсказаний
-    });
+  // Если нет данных для отображения
+  if (datasets.length === 0) {
+    return (
+      <Card className="chart-container">
+        <Card.Body>
+          <div className="text-center p-4">
+            <p className="text-muted">Нет данных для отображения графика</p>
+          </div>
+        </Card.Body>
+      </Card>
+    );
   }
 
   return (
@@ -138,6 +171,17 @@ const SensorChart = ({ readings, predictions, sensorType, unit }) => {
         <div style={{ height: '400px' }}>
           <Line options={options} data={data} />
         </div>
+        {/* Показываем информацию о качестве аппроксимации под графиком */}
+        {approximationData?.quality_metrics && (
+          <div className="mt-3 text-center">
+            <small className="text-muted">
+              Полином {approximationData.quality_metrics.degree}-й степени | 
+              Точность: R² = {(approximationData.quality_metrics.r_squared * 100).toFixed(1)}% | 
+              Точек данных: {approximationData.quality_metrics.num_original_points} | 
+              Точек аппроксимации: {approximationData.quality_metrics.num_approximation_points}
+            </small>
+          </div>
+        )}
       </Card.Body>
     </Card>
   );

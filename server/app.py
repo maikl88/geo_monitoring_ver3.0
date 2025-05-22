@@ -1,4 +1,4 @@
-# server/app.py
+# server/app.py (обновленная версия)
 
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -9,7 +9,7 @@ from server.config import SQLALCHEMY_DATABASE_URI, SECRET_KEY, API_PREFIX, MQTT_
 from server.utils.data_generator import DataGenerator
 from server.database.db import db
 from server.models.sensor_data import Building, Sensor
-from server.mqtt import init_mqtt  # Импортируем функцию инициализации MQTT
+from server.mqtt import init_mqtt
 
 def create_app():
     app = Flask(__name__)
@@ -51,8 +51,8 @@ def create_app():
             if Building.query.first() is not None:
                 return jsonify({'message': 'Данные уже существуют в БД'}), 200
             
-            # Создаем тестовые здания
-            buildings = DataGenerator.generate_sample_buildings(count=2)
+            # Создаем тестовые здания (УБИРАЕМ жесткое ограничение count=2)
+            buildings = DataGenerator.generate_sample_buildings()  # Используем значение по умолчанию из класса
             db.session.add_all(buildings)
             db.session.commit()
             
@@ -66,16 +66,21 @@ def create_app():
             db.session.add_all(sensors)
             db.session.commit()
             
-            # Генерация ИСТОРИЧЕСКИХ показаний для каждого датчика
+            # КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Генерация исторических показаний БЕЗ РАЗРЫВА
+            # Данные будут сгенерированы вплоть до текущего момента
             for sensor in Sensor.query.all():
-                DataGenerator.generate_readings_for_sensor(sensor, days_back=7, readings_per_day=24)
+                DataGenerator.generate_readings_for_sensor(
+                    sensor, 
+                    days_back=3,  # Уменьшаем до 3 дней для более быстрой генерации
+                    readings_per_day=24
+                )
             
-            # Показания датчиков теперь будут приходить через MQTT
             return jsonify({
-                'message': 'Тестовые данные созданы. Здания и датчики инициализированы.',
-                'info': 'Для получения показаний запустите скрипт sensors_simulator.py',
+                'message': 'Тестовые данные созданы БЕЗ временного разрыва.',
+                'info': 'Исторические данные идут до текущего времени. Симулятор будет продолжать с этого момента.',
                 'buildings': len(buildings),
-                'sensors': len(sensors)
+                'sensors': len(sensors),
+                'data_period': '3 дня исторических данных до текущего момента'
             }), 200
         except Exception as e:
             return jsonify({'error': str(e)}), 500

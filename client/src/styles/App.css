@@ -1,4 +1,4 @@
-/* client/src/styles/App.css */
+/* client/src/styles/App.css (обновленная версия) */
 body {
   font-family: 'Roboto', sans-serif;
   background-color: #f5f5f5;
@@ -88,7 +88,8 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.prediction-alert {
+/* Обновленные стили для аппроксимации (заменяют prediction-alert) */
+.approximation-alert {
   background-color: #fff3cd;
   border-left: 5px solid #ffc107;
   padding: 10px 15px;
@@ -96,7 +97,7 @@ body {
   border-radius: 4px;
 }
 
-.prediction-alert.danger {
+.approximation-alert.danger {
   background-color: #f8d7da;
   border-left-color: #dc3545;
 }
