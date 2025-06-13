@@ -10,7 +10,7 @@ echo "Инициализация тестовыми данными..."
 curl http://localhost:5000/init-sample-data
 
 echo "Запуск симулятора датчиков..."
-python sensors_simulator.py --interval 5 &
+python sensors_simulator.py --interval 1 &
 SIMULATOR_PID=$!
 
 echo "Запуск клиентской части..."

@@ -1,93 +1,68 @@
-// client/src/components/ApproximationView.js (исправленная версия)
+// client/src/components/ApproximationView.js (УПРОЩЕННАЯ ВЕРСИЯ)
 import React from 'react';
 import { Card, Alert, Badge, Row, Col } from 'react-bootstrap';
 import { FaChartLine, FaArrowUp, FaArrowDown, FaMinus } from 'react-icons/fa';
 
 const ApproximationView = ({ approximationData, trendAnalysis, unit, sensorType }) => {
-  // Показываем информацию даже при частичных ошибках
+  
+  // Если нет данных
   if (!approximationData) {
     return (
-      <Card className="sensor-details-card mt-4">
+      <Card className="mt-4">
         <Card.Header as="h5">
           <FaChartLine className="me-2" />
-          Анализ данных с аппроксимацией
+          Анализ данных
         </Card.Header>
         <Card.Body>
-          <Alert variant="info">
-            Загрузка данных для аппроксимации...
-          </Alert>
+          <Alert variant="info">Загрузка данных...</Alert>
         </Card.Body>
       </Card>
     );
   }
 
+  // Если есть ошибка
   if (approximationData.error) {
     return (
-      <Card className="sensor-details-card mt-4">
+      <Card className="mt-4">
         <Card.Header as="h5">
           <FaChartLine className="me-2" />
-          Анализ данных с аппроксимацией
+          Анализ данных
         </Card.Header>
         <Card.Body>
           <Alert variant="warning">
             <Alert.Heading>Недостаточно данных</Alert.Heading>
             <p>{approximationData.error}</p>
-            <hr />
             <p className="mb-0">
-              <strong>Рекомендации:</strong>
-              <ul className="mt-2">
-                <li>Увеличьте период анализа данных</li>
-                <li>Дождитесь накопления большего количества показаний</li>
-                <li>Проверьте работу датчика и поступление данных</li>
-              </ul>
+              <strong>Попробуйте:</strong>
             </p>
+            <ul>
+              <li>Увеличить период анализа</li>
+              <li>Дождаться накопления данных</li>
+              <li>Проверить работу датчика</li>
+            </ul>
           </Alert>
         </Card.Body>
       </Card>
     );
   }
 
-  // Получаем данные о качестве аппроксимации
-  const qualityMetrics = approximationData.quality_metrics || {};
-  
-  // Поддерживаем как старые, так и новые поля
-  const qualityScore = qualityMetrics.quality_score || qualityMetrics.r_squared || 0;
-  const method = qualityMetrics.method || 'polynomial';
-  const degree = qualityMetrics.degree || 'неизвестно';
-  const originalPoints = qualityMetrics.num_original_points || 0;
-  const trainingPoints = qualityMetrics.num_training_points || originalPoints;
-  const requestedHours = qualityMetrics.requested_hours || 1;
+  // Получаем метрики качества
+  const quality = approximationData.quality_metrics || {};
+  const rSquared = quality.r_squared || 0;
+  const degree = quality.degree || 'неизвестно';
+  const originalPoints = quality.num_original_points || 0;
 
   // Определяем качество аппроксимации
-  const getQualityInfo = (score) => {
-    if (score >= 0.9) {
-      return { variant: 'success', text: 'Отличное' };
-    } else if (score >= 0.8) {
-      return { variant: 'primary', text: 'Хорошее' };
-    } else if (score >= 0.6) {
-      return { variant: 'warning', text: 'Удовлетворительное' };
-    } else {
-      return { variant: 'danger', text: 'Плохое' };
-    }
+  const getQualityBadge = (score) => {
+    if (score >= 0.9) return { variant: 'success', text: 'Отличное' };
+    if (score >= 0.7) return { variant: 'primary', text: 'Хорошее' };
+    if (score >= 0.5) return { variant: 'warning', text: 'Удовлетворительное' };
+    return { variant: 'danger', text: 'Плохое' };
   };
 
-  const qualityInfo = getQualityInfo(qualityScore);
+  const qualityBadge = getQualityBadge(rSquared);
 
-  // Определяем текст метода аппроксимации
-  const getMethodText = (method) => {
-    switch (method) {
-      case 'polynomial':
-        return `Полином ${degree}-й степени`;
-      case 'spline':
-        return 'Сплайн-интерполяция';
-      case 'linear':
-        return 'Линейная интерполяция';
-      default:
-        return `${method} (степень ${degree})`;
-    }
-  };
-
-  // Определяем иконку и цвет для тренда
+  // Иконки для трендов
   const getTrendIcon = (trend) => {
     switch (trend) {
       case 'increasing':
@@ -96,43 +71,37 @@ const ApproximationView = ({ approximationData, trendAnalysis, unit, sensorType 
       case 'decreasing':
       case 'strongly_decreasing':
         return <FaArrowDown className="text-primary" />;
-      case 'stable':
       default:
         return <FaMinus className="text-success" />;
     }
   };
 
-  const getTrendVariant = (trend) => {
+  const getTrendBadge = (trend) => {
     switch (trend) {
-      case 'strongly_increasing':
-        return 'danger';
-      case 'increasing':
-        return 'warning';
-      case 'decreasing':
-        return 'primary';
-      case 'strongly_decreasing':
-        return 'info';
-      case 'stable':
-      default:
-        return 'success';
+      case 'strongly_increasing': return 'danger';
+      case 'increasing': return 'warning';
+      case 'decreasing': return 'primary';
+      case 'strongly_decreasing': return 'info';
+      default: return 'success';
     }
   };
 
   return (
-    <Card className="sensor-details-card mt-4">
+    <Card className="mt-4">
       <Card.Header as="h5">
         <FaChartLine className="me-2" />
         Анализ данных с аппроксимацией
       </Card.Header>
       <Card.Body>
-        {/* Информация о тренде */}
+        
+        {/* Тренд и качество */}
         <Row className="mb-3">
           <Col md={6}>
             <h6>Тренд показаний:</h6>
             <div className="d-flex align-items-center">
               {getTrendIcon(trendAnalysis?.trend)}
-              <Badge bg={getTrendVariant(trendAnalysis?.trend)} className="ms-2">
-                {trendAnalysis?.description || 'Данные обрабатываются...'}
+              <Badge bg={getTrendBadge(trendAnalysis?.trend)} className="ms-2">
+                {trendAnalysis?.description || 'Анализируется...'}
               </Badge>
             </div>
             {trendAnalysis?.change_percent && (
@@ -144,12 +113,12 @@ const ApproximationView = ({ approximationData, trendAnalysis, unit, sensorType 
           
           <Col md={6}>
             <h6>Качество аппроксимации:</h6>
-            <Badge bg={qualityInfo.variant}>
-              {qualityInfo.text} (R² = {(qualityScore * 100).toFixed(1)}%)
+            <Badge bg={qualityBadge.variant}>
+              {qualityBadge.text} ({(rSquared * 100).toFixed(1)}%)
             </Badge>
             <br />
             <small className="text-muted">
-              {getMethodText(method)}
+              Полином {degree}-й степени
             </small>
           </Col>
         </Row>
@@ -158,83 +127,51 @@ const ApproximationView = ({ approximationData, trendAnalysis, unit, sensorType 
         <Row className="mb-3">
           <Col md={6}>
             <small className="text-muted">
-              <strong>Данные за период:</strong> {requestedHours}ч ({originalPoints} точек)
+              <strong>Период анализа:</strong> {quality.requested_hours || 24} часов
             </small>
-            {trainingPoints > originalPoints && (
-              <><br />
-              <small className="text-muted">
-                <strong>Для обучения использовано:</strong> {trainingPoints} точек
-              </small></>
-            )}
+            <br />
+            <small className="text-muted">
+              <strong>Точек данных:</strong> {originalPoints}
+            </small>
           </Col>
           <Col md={6}>
-            <small className="text-muted">
-              <strong>Метод аппроксимации:</strong> {method}
-            </small>
+            {trendAnalysis?.start_value && trendAnalysis?.end_value && (
+              <>
+                <small className="text-muted">
+                  <strong>Начало:</strong> {trendAnalysis.start_value.toFixed(2)} {unit}
+                </small>
+                <br />
+                <small className="text-muted">
+                  <strong>Сейчас:</strong> {trendAnalysis.end_value.toFixed(2)} {unit}
+                </small>
+              </>
+            )}
           </Col>
         </Row>
 
-        {/* Дополнительная информация о значениях */}
-        {trendAnalysis && (
-          <Row className="mb-3">
-            <Col md={6}>
-              <small className="text-muted">
-                <strong>Начальное значение:</strong> {trendAnalysis.start_value?.toFixed(2)} {unit}
-              </small>
-            </Col>
-            <Col md={6}>
-              <small className="text-muted">
-                <strong>Текущее значение:</strong> {trendAnalysis.end_value?.toFixed(2)} {unit}
-              </small>
-            </Col>
-          </Row>
-        )}
-
-        {/* Предупреждения на основе тренда */}
+        {/* Предупреждения */}
         {trendAnalysis?.trend === 'strongly_increasing' && (
-          <Alert variant="warning" className="approximation-alert">
-            <div className="d-flex align-items-center">
-              <FaArrowUp className="me-2" />
-              <div>
-                <strong>Внимание!</strong> Наблюдается сильный рост показаний {sensorType}.
-                Рекомендуется дополнительная проверка системы.
-              </div>
-            </div>
+          <Alert variant="warning">
+            <FaArrowUp className="me-2" />
+            <strong>Внимание!</strong> Сильный рост показаний {sensorType}. 
+            Рекомендуется проверка.
           </Alert>
         )}
 
         {trendAnalysis?.trend === 'strongly_decreasing' && (
-          <Alert variant="info" className="approximation-alert">
-            <div className="d-flex align-items-center">
-              <FaArrowDown className="me-2" />
-              <div>
-                <strong>Информация:</strong> Наблюдается значительное снижение показаний {sensorType}.
-                Это может указывать на изменение условий работы датчика.
-              </div>
-            </div>
+          <Alert variant="info">
+            <FaArrowDown className="me-2" />
+            <strong>Информация:</strong> Значительное снижение показаний {sensorType}.
           </Alert>
         )}
 
-        {/* Информация о качестве данных */}
-        {qualityScore < 0.6 && (
-          <Alert variant="secondary" className="approximation-alert">
-            <div>
-              <strong>Примечание:</strong> Низкое качество аппроксимации может указывать на высокий уровень шумов 
-              в данных или нестабильную работу датчика. Рекомендуется увеличить период анализа или 
-              проверить техническое состояние {sensorType}.
-            </div>
+        {rSquared < 0.5 && (
+          <Alert variant="secondary">
+            <strong>Примечание:</strong> Низкое качество аппроксимации может указывать 
+            на высокий уровень шумов или нестабильность {sensorType}.
           </Alert>
         )}
 
-        {/* Информация о методе интерполяции для случаев с малым количеством данных */}
-        {method !== 'polynomial' && (
-          <Alert variant="info" className="approximation-alert">
-            <div>
-              <strong>Информация:</strong> Из-за недостаточного количества данных использована {method === 'spline' ? 'сплайн-интерполяция' : 'линейная интерполяция'} 
-              вместо полиномиальной аппроксимации. Для более точного анализа рекомендуется увеличить период сбора данных.
-            </div>
-          </Alert>
-        )}
       </Card.Body>
     </Card>
   );

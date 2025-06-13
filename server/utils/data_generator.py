@@ -1,4 +1,4 @@
-# server/utils/data_generator.py (исправленная версия)
+# server/utils/data_generator.py (УПРОЩЕННАЯ ВЕРСИЯ)
 
 import random
 from datetime import datetime, timedelta
@@ -7,45 +7,43 @@ from server.models.sensor_data import Sensor, Building, AlertConfig
 from server.services.data_service import DataService
 
 class DataGenerator:
-    """Генератор синтетических данных для тестирования"""
+    """Упрощенный генератор данных"""
     
     @staticmethod
-    def generate_sample_buildings(count=10):
+    def generate_sample_buildings(count=5):
         """Создает тестовые здания"""
         buildings = []
-        building_types = ['Жилое', 'Офисное', 'Промышленное']
+        types = ['Жилое', 'Офисное', 'Промышленное']
         
         for i in range(1, count + 1):
             building = Building(
                 name=f'Здание {i}',
-                address=f'ул. Примерная, д. {i}',
-                floors=random.randint(5, 30),
-                construction_year=random.randint(1990, 2020),
-                building_type=random.choice(building_types)
+                address=f'ул. Тестовая, д. {i}',
+                floors=random.randint(5, 20),
+                construction_year=random.randint(2000, 2020),
+                building_type=random.choice(types)
             )
             buildings.append(building)
             
         return buildings
     
     @staticmethod
-    def generate_sample_sensors(buildings, count_per_building=5):
-        """Создает тестовые датчики для зданий"""
+    def generate_sample_sensors(buildings, count_per_building=3):
+        """Создает тестовые датчики"""
         sensors = []
         sensor_types = ['инклинометр', 'тензометр', 'акселерометр', 'датчик трещин', 'датчик температуры']
         
         for building in buildings:
             for i in range(count_per_building):
                 sensor_type = random.choice(sensor_types)
-                floor = random.randint(1, building.floors) if building.floors else None
+                floor = random.randint(1, building.floors) if building.floors else 1
                 
                 sensor = Sensor(
-                    name=f'{sensor_type.capitalize()} {building.name} {i + 1}',
+                    name=f'{sensor_type.capitalize()} {building.name}-{i + 1}',
                     sensor_type=sensor_type,
-                    location=f'Этаж {floor}, {random.choice(["северная", "южная", "западная", "восточная"])} сторона',
+                    location=f'Этаж {floor}',
                     building_id=building.id,
                     floor=floor,
-                    position_x=random.uniform(0, 100),
-                    position_y=random.uniform(0, 100),
                     status='active'
                 )
                 sensors.append(sensor)
@@ -54,7 +52,7 @@ class DataGenerator:
     
     @staticmethod
     def generate_alert_configs():
-        """Создает настройки тревог для разных типов датчиков"""
+        """Создает настройки тревог"""
         configs = [
             AlertConfig(sensor_type='инклинометр', min_threshold=-5, max_threshold=5, unit='градусы'),
             AlertConfig(sensor_type='тензометр', min_threshold=-50, max_threshold=50, unit='мкм/м'),
@@ -65,157 +63,55 @@ class DataGenerator:
         return configs
     
     @staticmethod
-    def generate_readings_for_sensor(sensor, days_back=7, readings_per_day=24):
-        """
-        Генерирует исторические показания для датчика БЕЗ ВРЕМЕННОГО РАЗРЫВА
+    def generate_readings_for_sensor(sensor, days_back=2, readings_per_day=24):
+        """Генерирует исторические данные БЕЗ разрыва до текущего времени"""
         
-        ВАЖНО: Генерирует данные вплоть до ТЕКУЩЕГО момента, 
-        чтобы не было разрыва с данными от симулятора
-        """
-        readings = []
+        # Базовые значения для разных типов датчиков
+        sensor_configs = {
+            'инклинометр': {'base': 0, 'unit': 'градусы', 'noise': 0.5},
+            'тензометр': {'base': 0, 'unit': 'мкм/м', 'noise': 1.0},
+            'акселерометр': {'base': 5, 'unit': 'мм/с²', 'noise': 2.0},
+            'датчик трещин': {'base': 0.5, 'unit': 'мм', 'noise': 0.1},
+            'датчик температуры': {'base': 20, 'unit': '°C', 'noise': 1.0}
+        }
         
-        # КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: конечное время = СЕЙЧАС
+        config = sensor_configs.get(sensor.sensor_type, {'base': 0, 'unit': 'единицы', 'noise': 1.0})
+        
+        # Время: от days_back дней назад до СЕЙЧАС (без разрыва)
         end_time = datetime.utcnow()
-        
-        # Начальное время = days_back дней назад
         start_time = end_time - timedelta(days=days_back)
         
-        print(f"Генерация показаний для датчика {sensor.id} ({sensor.name})")
-        print(f"Период: {start_time} → {end_time}")
-        
-        # Определяем базовое значение и единицу измерения в зависимости от типа датчика
-        base_value = 0
-        unit = 'единицы'
-        
-        if sensor.sensor_type == 'инклинометр':
-            base_value = 0  # Начальный наклон 0 градусов
-            unit = 'градусы'
-        elif sensor.sensor_type == 'тензометр':
-            base_value = 0  # Начальная деформация 0 мкм/м
-            unit = 'мкм/м'
-        elif sensor.sensor_type == 'акселерометр':
-            base_value = 5  # Базовая вибрация 5 мм/с²
-            unit = 'мм/с²'
-        elif sensor.sensor_type == 'датчик трещин':
-            base_value = 0.5  # Начальная ширина трещины 0.5 мм
-            unit = 'мм'
-        elif sensor.sensor_type == 'датчик температуры':
-            base_value = 20  # Начальная температура 20°C
-            unit = '°C'
-        
-        # Генерируем значения с некоторым трендом и случайными колебаниями
         total_readings = days_back * readings_per_day
-        time_interval = (end_time - start_time) / total_readings
+        time_step = (end_time - start_time) / total_readings
+        
+        print(f"Генерация для {sensor.name}: {start_time} → {end_time}")
         
         for i in range(total_readings):
-            # ВАЖНО: timestamp идет до самого конца (до текущего времени)
-            timestamp = start_time + time_interval * i
+            # Время - равномерное распределение до текущего момента
+            timestamp = start_time + time_step * i
             
-            # Добавляем тренд (медленное изменение со временем)
-            trend_factor = i / total_readings
-            trend = 0
+            # Базовое значение + тренд + шум
+            trend = (i / total_readings) * config['base'] * 0.1  # Небольшой тренд
+            noise = random.uniform(-1, 1) * config['noise']
             
-            if sensor.sensor_type == 'инклинометр':
-                trend = trend_factor * 3  # Медленное увеличение наклона
-            elif sensor.sensor_type == 'тензометр':
-                trend = trend_factor * 20  # Медленное увеличение деформации
-            elif sensor.sensor_type == 'датчик трещин':
-                trend = trend_factor * 2  # Медленное увеличение ширины трещины
-            
-            # Добавляем периодические колебания (например, день-ночь для температуры)
-            hour_of_day = timestamp.hour
+            # Периодические колебания (суточные для температуры)
             periodic = 0
-            
             if sensor.sensor_type == 'датчик температуры':
-                periodic = 5 * math.sin(hour_of_day * math.pi / 12)  # ±5°C в течение дня
-            elif sensor.sensor_type == 'акселерометр':
-                # Больше вибраций в рабочие часы
-                if 8 <= hour_of_day <= 18:
-                    periodic = 5
+                hour_factor = timestamp.hour / 24.0 * 2 * math.pi
+                periodic = 3 * math.sin(hour_factor)  # ±3°C суточные колебания
             
-            # Добавляем случайный шум
-            noise = random.uniform(-1, 1)
-            noise_factor = 0.5
+            value = config['base'] + trend + periodic + noise
             
-            if sensor.sensor_type == 'акселерометр':
-                noise_factor = 2  # Акселерометры более шумные
-            
-            # Итоговое значение
-            value = base_value + trend + periodic + (noise * noise_factor)
-            
-            # Создаем показание
+            # Сохраняем через DataService
             try:
                 DataService.add_sensor_reading(
                     sensor_id=sensor.id,
                     value=value,
-                    unit=unit,
+                    unit=config['unit'],
                     timestamp=timestamp
                 )
             except Exception as e:
-                print(f"Ошибка добавления показания: {e}")
+                print(f"Ошибка сохранения: {e}")
                 continue
                 
-        print(f"Сгенерировано {total_readings} показаний для датчика {sensor.id}")
-    
-    @staticmethod
-    def cleanup_old_readings(sensor_id, keep_days=30):
-        """
-        Удаляет старые показания, оставляя только последние keep_days дней
-        Полезно для очистки БД от накопившихся данных
-        """
-        from server.database.db import db
-        from server.models.sensor_data import SensorReading
-        
-        cutoff_time = datetime.utcnow() - timedelta(days=keep_days)
-        
-        old_readings = SensorReading.query.filter(
-            SensorReading.sensor_id == sensor_id,
-            SensorReading.timestamp < cutoff_time
-        ).all()
-        
-        count = len(old_readings)
-        if count > 0:
-            for reading in old_readings:
-                db.session.delete(reading)
-            
-            db.session.commit()
-            print(f"Удалено {count} старых показаний для датчика {sensor_id}")
-        
-        return count
-    
-    @staticmethod
-    def regenerate_recent_data(sensor_id, hours_back=24):
-        """
-        Пересоздает данные за последние несколько часов
-        Полезно для заполнения пробелов в данных
-        """
-        from server.database.db import db
-        from server.models.sensor_data import SensorReading
-        
-        sensor = DataService.get_sensor(sensor_id)
-        if not sensor:
-            print(f"Датчик {sensor_id} не найден")
-            return
-        
-        # Удаляем существующие данные за период
-        start_time = datetime.utcnow() - timedelta(hours=hours_back)
-        recent_readings = SensorReading.query.filter(
-            SensorReading.sensor_id == sensor_id,
-            SensorReading.timestamp >= start_time
-        ).all()
-        
-        for reading in recent_readings:
-            db.session.delete(reading)
-        
-        db.session.commit()
-        print(f"Удалены показания за последние {hours_back} часов для датчика {sensor_id}")
-        
-        # Генерируем новые данные
-        days_fraction = hours_back / 24
-        DataGenerator.generate_readings_for_sensor(
-            sensor, 
-            days_back=days_fraction, 
-            readings_per_day=24
-        )
-        
-        print(f"Сгенерированы новые показания за последние {hours_back} часов")
+        print(f"Сгенерировано {total_readings} показаний")

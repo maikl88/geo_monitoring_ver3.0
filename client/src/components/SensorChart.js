@@ -1,4 +1,5 @@
-// client/src/components/SensorChart.js (обновленная версия)
+// client/src/components/SensorChart.js (С ЖИРНОЙ АППРОКСИМАЦИЕЙ ПОВЕРХ)
+
 import React from 'react';
 import { Card } from 'react-bootstrap';
 import { Line } from 'react-chartjs-2';
@@ -14,9 +15,7 @@ import {
   TimeScale,
 } from 'chart.js';
 import 'chartjs-adapter-date-fns';
-import { ru } from 'date-fns/locale';
 
-// Регистрируем необходимые компоненты ChartJS
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -29,14 +28,19 @@ ChartJS.register(
 );
 
 const SensorChart = ({ readings, approximationData, sensorType, unit }) => {
-  // Подготавливаем исходные данные для графика
-  const formatReadingsData = () => {
-    if (!readings || readings.length === 0) {
-      return [];
-    }
+  
+  // Функция для нормализации времени
+  const normalizeTime = (timestamp) => {
+    const cleanTime = timestamp.replace('Z', '');
+    return new Date(cleanTime + 'Z');
+  };
 
+  // Подготавливаем данные показаний
+  const formatReadingsData = () => {
+    if (!readings || readings.length === 0) return [];
+    
     return readings.map(reading => ({
-      x: new Date(reading.timestamp),
+      x: normalizeTime(reading.timestamp),
       y: reading.value
     }));
   };
@@ -48,12 +52,12 @@ const SensorChart = ({ readings, approximationData, sensorType, unit }) => {
     }
 
     return approximationData.approximation.map(point => ({
-      x: new Date(point.timestamp),
+      x: normalizeTime(point.timestamp),
       y: point.value
     }));
   };
 
-  // Настройки для графика
+  // Настройки графика
   const options = {
     responsive: true,
     maintainAspectRatio: false,
@@ -68,17 +72,13 @@ const SensorChart = ({ readings, approximationData, sensorType, unit }) => {
           unit: 'hour',
           tooltipFormat: 'dd.MM.yyyy HH:mm',
           displayFormats: {
-            hour: 'HH:mm'
+            hour: 'HH:mm',
+            day: 'dd.MM'
           }
         },
         title: {
           display: true,
           text: 'Время'
-        },
-        adapters: {
-          date: {
-            locale: ru
-          }
         }
       },
       y: {
@@ -90,75 +90,70 @@ const SensorChart = ({ readings, approximationData, sensorType, unit }) => {
     },
     plugins: {
       legend: {
-        position: 'top',
+        position: 'top'
       },
       title: {
         display: true,
-        text: `Показания ${sensorType || 'датчика'} с полиномиальной аппроксимацией`
+        text: `Показания ${sensorType || 'датчика'}`
       },
       tooltip: {
         callbacks: {
           label: function(context) {
-            let label = context.dataset.label || '';
-            if (label) {
-              label += ': ';
-            }
-            if (context.parsed.y !== null) {
-              label += `${context.parsed.y.toFixed(2)} ${unit || ''}`;
-            }
-            return label;
+            const label = context.dataset.label || '';
+            const value = context.parsed.y?.toFixed(2) || 'N/A';
+            return `${label}: ${value} ${unit || ''}`;
           }
         }
       }
     }
   };
 
-  // Данные для графика
+  // Готовим данные для графика
   const datasets = [];
-
-  // Добавляем исходные данные (точки датчика)
+  
+  // 1. СНАЧАЛА добавляем исходные данные (будут ПОД аппроксимацией)
   const readingsData = formatReadingsData();
   if (readingsData.length > 0) {
     datasets.push({
       label: 'Данные датчика',
       data: readingsData,
-      borderColor: 'rgba(75, 192, 192, 0.6)',
-      backgroundColor: 'rgba(75, 192, 192, 0.8)',
-      pointRadius: 3,
-      pointHoverRadius: 5,
-      borderWidth: 1,
-      tension: 0, // Прямые линии между точками
-      showLine: true
+      borderColor: 'rgba(75, 192, 192, 0.7)',        // Более прозрачный
+      backgroundColor: 'rgba(75, 192, 192, 0.2)',     // Очень прозрачный
+      pointRadius: 2,                                  // Меньше точки
+      pointHoverRadius: 4,
+      borderWidth: 1,                                  // Тонкая линия
+      tension: 0,
+      order: 2                                         // ⭐ Порядок отрисовки: 2 = под аппроксимацией
     });
   }
 
-  // Добавляем аппроксимацию (гладкая кривая)
+  // 2. ПОТОМ добавляем аппроксимацию (будет ПОВЕРХ данных)
   const approximationPoints = formatApproximationData();
   if (approximationPoints.length > 0) {
+    const degree = approximationData?.quality_metrics?.degree || 'авто';
     datasets.push({
-      label: `Аппроксимация (степень ${approximationData?.quality_metrics?.degree || 'авто'})`,
+      label: `Аппроксимация (степень ${degree})`,
       data: approximationPoints,
-      borderColor: 'rgba(255, 99, 132, 0.8)',
-      backgroundColor: 'rgba(255, 99, 132, 0.1)',
-      pointRadius: 0, // Убираем точки для гладкой кривой
-      pointHoverRadius: 3,
-      borderWidth: 3,
-      tension: 0.1, // Небольшая сглаженность
-      fill: false
+      borderColor: 'rgba(220, 53, 69, 1)',            // ⭐ Яркий красный, непрозрачный
+      backgroundColor: 'rgba(220, 53, 69, 0.1)',      // Слабая заливка
+      pointRadius: 0,                                  // Без точек для гладкости
+      pointHoverRadius: 0,
+      borderWidth: 4,                                  // ⭐ ЖИРНАЯ линия (было 3)
+      tension: 0.1,
+      fill: false,
+      order: 1                                         // ⭐ Порядок отрисовки: 1 = поверх данных
     });
   }
 
-  const data = {
-    datasets: datasets
-  };
+  const data = { datasets };
 
-  // Если нет данных для отображения
+  // Если нет данных
   if (datasets.length === 0) {
     return (
       <Card className="chart-container">
         <Card.Body>
           <div className="text-center p-4">
-            <p className="text-muted">Нет данных для отображения графика</p>
+            <p className="text-muted">Нет данных для отображения</p>
           </div>
         </Card.Body>
       </Card>
@@ -171,14 +166,13 @@ const SensorChart = ({ readings, approximationData, sensorType, unit }) => {
         <div style={{ height: '400px' }}>
           <Line options={options} data={data} />
         </div>
-        {/* Показываем информацию о качестве аппроксимации под графиком */}
+        {/* Информация о качестве */}
         {approximationData?.quality_metrics && (
           <div className="mt-3 text-center">
             <small className="text-muted">
-              Полином {approximationData.quality_metrics.degree}-й степени | 
-              Точность: R² = {(approximationData.quality_metrics.r_squared * 100).toFixed(1)}% | 
-              Точек данных: {approximationData.quality_metrics.num_original_points} | 
-              Точек аппроксимации: {approximationData.quality_metrics.num_approximation_points}
+              <span style={{ color: '#dc3545', fontWeight: 'bold' }}>━━</span> Полином {approximationData.quality_metrics.degree}-й степени | 
+              R² = {(approximationData.quality_metrics.r_squared * 100).toFixed(1)}% | 
+              Точек: {approximationData.quality_metrics.num_original_points}
             </small>
           </div>
         )}
