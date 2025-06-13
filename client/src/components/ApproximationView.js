@@ -1,4 +1,4 @@
-// client/src/components/ApproximationView.js
+// client/src/components/ApproximationView.js (исправленная версия)
 import React from 'react';
 import { Card, Alert, Badge, Row, Col } from 'react-bootstrap';
 import { FaChartLine, FaArrowUp, FaArrowDown, FaMinus } from 'react-icons/fa';
@@ -49,24 +49,43 @@ const ApproximationView = ({ approximationData, trendAnalysis, unit, sensorType 
 
   // Получаем данные о качестве аппроксимации
   const qualityMetrics = approximationData.quality_metrics || {};
-  const rSquared = qualityMetrics.r_squared || 0;
+  
+  // Поддерживаем как старые, так и новые поля
+  const qualityScore = qualityMetrics.quality_score || qualityMetrics.r_squared || 0;
+  const method = qualityMetrics.method || 'polynomial';
   const degree = qualityMetrics.degree || 'неизвестно';
   const originalPoints = qualityMetrics.num_original_points || 0;
+  const trainingPoints = qualityMetrics.num_training_points || originalPoints;
+  const requestedHours = qualityMetrics.requested_hours || 1;
 
   // Определяем качество аппроксимации
-  const getQualityInfo = (rSquared) => {
-    if (rSquared >= 0.9) {
+  const getQualityInfo = (score) => {
+    if (score >= 0.9) {
       return { variant: 'success', text: 'Отличное' };
-    } else if (rSquared >= 0.8) {
+    } else if (score >= 0.8) {
       return { variant: 'primary', text: 'Хорошее' };
-    } else if (rSquared >= 0.6) {
+    } else if (score >= 0.6) {
       return { variant: 'warning', text: 'Удовлетворительное' };
     } else {
       return { variant: 'danger', text: 'Плохое' };
     }
   };
 
-  const qualityInfo = getQualityInfo(rSquared);
+  const qualityInfo = getQualityInfo(qualityScore);
+
+  // Определяем текст метода аппроксимации
+  const getMethodText = (method) => {
+    switch (method) {
+      case 'polynomial':
+        return `Полином ${degree}-й степени`;
+      case 'spline':
+        return 'Сплайн-интерполяция';
+      case 'linear':
+        return 'Линейная интерполяция';
+      default:
+        return `${method} (степень ${degree})`;
+    }
+  };
 
   // Определяем иконку и цвет для тренда
   const getTrendIcon = (trend) => {
@@ -126,11 +145,31 @@ const ApproximationView = ({ approximationData, trendAnalysis, unit, sensorType 
           <Col md={6}>
             <h6>Качество аппроксимации:</h6>
             <Badge bg={qualityInfo.variant}>
-              {qualityInfo.text} (R² = {(rSquared * 100).toFixed(1)}%)
+              {qualityInfo.text} (R² = {(qualityScore * 100).toFixed(1)}%)
             </Badge>
             <br />
             <small className="text-muted">
-              Полином {degree}-й степени по {originalPoints} точкам
+              {getMethodText(method)}
+            </small>
+          </Col>
+        </Row>
+
+        {/* Информация о данных */}
+        <Row className="mb-3">
+          <Col md={6}>
+            <small className="text-muted">
+              <strong>Данные за период:</strong> {requestedHours}ч ({originalPoints} точек)
+            </small>
+            {trainingPoints > originalPoints && (
+              <><br />
+              <small className="text-muted">
+                <strong>Для обучения использовано:</strong> {trainingPoints} точек
+              </small></>
+            )}
+          </Col>
+          <Col md={6}>
+            <small className="text-muted">
+              <strong>Метод аппроксимации:</strong> {method}
             </small>
           </Col>
         </Row>
@@ -177,12 +216,22 @@ const ApproximationView = ({ approximationData, trendAnalysis, unit, sensorType 
         )}
 
         {/* Информация о качестве данных */}
-        {rSquared < 0.6 && (
+        {qualityScore < 0.6 && (
           <Alert variant="secondary" className="approximation-alert">
             <div>
               <strong>Примечание:</strong> Низкое качество аппроксимации может указывать на высокий уровень шумов 
               в данных или нестабильную работу датчика. Рекомендуется увеличить период анализа или 
               проверить техническое состояние {sensorType}.
+            </div>
+          </Alert>
+        )}
+
+        {/* Информация о методе интерполяции для случаев с малым количеством данных */}
+        {method !== 'polynomial' && (
+          <Alert variant="info" className="approximation-alert">
+            <div>
+              <strong>Информация:</strong> Из-за недостаточного количества данных использована {method === 'spline' ? 'сплайн-интерполяция' : 'линейная интерполяция'} 
+              вместо полиномиальной аппроксимации. Для более точного анализа рекомендуется увеличить период сбора данных.
             </div>
           </Alert>
         )}

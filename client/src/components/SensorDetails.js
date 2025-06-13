@@ -168,6 +168,7 @@ const SensorDetails = () => {
                 <Form.Group className="mb-3">
                   <Form.Label>Период анализа данных</Form.Label>
                   <Form.Select value={timeRange} onChange={handleTimeRangeChange}>
+                    <option value="1">За последний час</option>
                     <option value="6">Последние 6 часов</option>
                     <option value="12">Последние 12 часов</option>
                     <option value="24">Последние 24 часа</option>
