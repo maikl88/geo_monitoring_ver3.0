@@ -678,7 +678,14 @@ const SensorDetails = () => {
               <h2 className="mb-0">📊 График показаний с аппроксимацией</h2>
               {autoRefresh && (
                 <Badge bg="success" className="ms-3">
-                  🔄 Обновляется каждые {refreshInterval}с
+                  <Form.Check 
+                    type="switch"
+                    id="auto-refresh-switch"
+                    label="🔄 Автообновление графика"
+                    checked={autoRefresh}
+                    onChange={handleAutoRefreshToggle}
+                  />
+                  Обновляется каждые {refreshInterval}с
                 </Badge>
               )}
             </div>

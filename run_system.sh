@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "Запуск серверной части..."
-cd ~/path/to/geo-monitoring
+cd ~/DEV/geo_monitoring_ver2.0/
 source env/bin/activate
 python -m server.app &
 SERVER_PID=$!
